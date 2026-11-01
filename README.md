@@ -1,108 +1,122 @@
-# Emotion-Based Music Player 🎵
+# Moodwave | Emotion-Based Music Player
 
-An emotion-aware music player that uses real-time facial emotion recognition to automatically play music based on the user's detected emotional state.
-
----
-
-## Overview
-
-This project combines computer vision and emotion analysis to create a personalized music listening experience. Using a webcam feed, the application detects the user's facial expression, classifies the emotion, and automatically plays music associated with the detected mood.
-
-The application features an interactive Streamlit interface for real-time emotion detection and music playback.
-
----
+Moodwave pairs a real-time mood check-in with a YouTube Music playlist. The migrated app uses a React, Vite, TypeScript, and Tailwind frontend with a FastAPI backend. The previous Streamlit implementation remains in the repository as a legacy version.
 
 ## Features
 
-- Real-time facial emotion detection using webcam input
-- Emotion analysis using DeepFace
-- Interactive user interface built with Streamlit
-- Automatic music playback based on detected emotions
-- Personalized listening experience
-- Simple and intuitive workflow
+- Browser webcam mood scans, with JPEG frames sent to the local API every 1.5 seconds for five seconds
+- DeepFace emotion detection and majority voting across the scan
+- Twelve shuffled, deduplicated mood-based YouTube Music suggestions, sourced from playlists and keyword searches in the selected language
+- User-initiated YouTube IFrame playback with progress seeking, previous, next, shuffle, auto-next, and automatic skip for embed errors
+- Recharts mood history saved in browser local storage
+- Mood-reactive gradients, glass panels, animated scan UI, and dark/light themes
+- Responsive layout; camera frames are processed by the local backend and are not saved
 
----
-
-## Tech Stack
-
-### Language
-- Python
-
-### Libraries & Frameworks
-- Streamlit
-- OpenCV
-- DeepFace
-
-### Components
-- Webcam Input
-- Local Audio Playback
-
----
-
-## How It Works
-
-1. Launch the Streamlit application.
-2. Capture live video through the webcam.
-3. Process video frames using OpenCV.
-4. Analyze facial expressions using DeepFace.
-5. Detect the user's emotion.
-6. Automatically play music corresponding to the detected emotion.
-
----
-
-## Supported Emotions
-
-The application can detect emotions such as:
-
-- Happy
-- Sad
-- Angry
-- Neutral
-- Surprise
-- Fear
-
-> Supported emotions may vary depending on the DeepFace model being used.
-
----
-
-## Installation
-
-### Clone the Repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/emotion-based-music-player.git
-cd emotion-based-music-player
-```
-
-### Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Run the Application
-
-```bash
-streamlit run app.py
-```
-
----
-
-## Project Structure
+## Project structure
 
 ```text
-emotion-based-music-player/
-│
-├── app.py
-├── requirements.txt
-├── music/
-├── assets/
-└── README.md
+.
+├── backend/
+│   ├── main.py                 # FastAPI API: /detect, /songs, /health
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx             # React app and player
+│   │   ├── api.ts              # FastAPI client
+│   │   ├── moods.ts            # Mood palette and labels
+│   │   ├── types.ts
+│   │   └── index.css           # Tailwind and Moodwave styles
+│   ├── package.json
+│   └── .env.example
+├── app.py                      # Legacy Streamlit app
+├── detection.py                # Legacy Streamlit camera detection
+└── music.py                    # Legacy Streamlit song/player helpers
 ```
 
-## Screenshots
+## Requirements
 
-<img width="599" height="390" alt="image" src="https://github.com/user-attachments/assets/7ca345d9-021f-486d-9602-c54ab207360f" />
+- Python 3.11 or 3.12 recommended for DeepFace and its TensorFlow dependencies
+- Node.js 20.19+ (Node.js 22+ recommended)
+- A YouTube Data API v3 key is optional; it enables embeddable-video search as a fallback if YouTube Music search is unavailable
 
-<img width="551" height="904" alt="image" src="https://github.com/user-attachments/assets/1b00b23c-f5be-4bd3-8ea3-725e81457991" />
+Moodwave uses `ytmusicapi` for its primary search. If that search fails or returns no tracks, it can use the YouTube Data API v3 with `videoEmbeddable=true`; set `YOUTUBE_API_KEY` to enable that fallback.
 
+## Run locally (Windows PowerShell)
+
+From the repository root, create a Python environment and install the backend packages:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend\requirements.txt
+```
+
+Optionally set a YouTube Data API key to enable fallback search, then start FastAPI:
+
+```powershell
+$env:YOUTUBE_API_KEY = "your-youtube-data-api-v3-key"
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In another terminal, install and start the frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` requests to FastAPI on port `8000`. The FastAPI CORS allowlist defaults to `localhost:5173` and `127.0.0.1:5173`; customize it with the comma-separated `CORS_ORIGINS` environment variable if the frontend uses a different origin.
+
+The frontend reads `VITE_API_BASE_URL` from `frontend/.env` when set. For the default local Vite proxy, copy `frontend/.env.example` to `frontend/.env` or leave the variable unset.
+
+## API
+
+### `POST /detect`
+
+Request JSON:
+
+```json
+{
+  "frame": "data:image/jpeg;base64,/9j/..."
+}
+```
+
+Response:
+
+```json
+{
+  "emotion": "happy",
+  "emoji": "😊"
+}
+```
+
+### `GET /songs?emotion=happy&lang=en&genre=all`
+
+Searches mood playlists first, loads tracks from the top two, then searches three mood keywords in the selected language. Results are deduplicated by video ID, shuffled, and capped at 12. Suggestion results are not cached.
+
+```json
+[
+  {
+    "videoId": "youtube-video-id",
+    "title": "Song title",
+    "artist": "Artist name",
+    "duration": "3:45",
+    "thumbnail": "https://..."
+  }
+]
+```
+
+Supported emotion values are `happy`, `sad`, `angry`, `surprise`, `fear`, `disgust`, and `neutral`.
+Supported `lang` values are `en`, `es`, `hi`, `fr`, `de`, `pt`, `ja`, and `ko`. `genre` accepts `all`, `pop`, `rock`, `hip-hop`, `r-and-b`, `electronic`, `indie`, `classical`, `jazz`, `lofi`, or `country`.
+
+## Checks
+
+```powershell
+cd frontend
+npm run build
+npm run lint
+cd ..
+python -m compileall backend\main.py
+```
